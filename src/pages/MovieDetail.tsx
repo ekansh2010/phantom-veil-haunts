@@ -1,13 +1,42 @@
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, Play, Plus, Star, Clock, Calendar } from "lucide-react";
+import { ArrowLeft, Play, Plus, Check, Star, Clock, Calendar } from "lucide-react";
 import { motion } from "framer-motion";
+import { useState, useEffect } from "react";
 import { getMovieById, movieCategories } from "@/data/movies";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 import Navbar from "@/components/Navbar";
 import MovieRow from "@/components/MovieRow";
 
 const MovieDetail = () => {
   const { id } = useParams();
   const movie = getMovieById(id || "");
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [inWatchlist, setInWatchlist] = useState(false);
+
+  useEffect(() => {
+    if (!user || !id) return;
+    supabase.from("watchlist").select("id").eq("user_id", user.id).eq("movie_id", id).maybeSingle()
+      .then(({ data }) => setInWatchlist(!!data));
+  }, [user, id]);
+
+  const toggleWatchlist = async () => {
+    if (!user) {
+      toast({ title: "Login required", description: "Sign in to add movies to your list.", variant: "destructive" });
+      return;
+    }
+    if (inWatchlist) {
+      await supabase.from("watchlist").delete().eq("user_id", user.id).eq("movie_id", id!);
+      setInWatchlist(false);
+      toast({ title: "Removed from watchlist" });
+    } else {
+      await supabase.from("watchlist").insert({ user_id: user.id, movie_id: id! });
+      setInWatchlist(true);
+      toast({ title: "Added to watchlist!" });
+    }
+  };
 
   if (!movie) {
     return (
@@ -59,8 +88,12 @@ const MovieDetail = () => {
             <button className="btn-horror px-8 py-3 rounded-lg flex items-center gap-2 font-medium text-primary-foreground">
               <Play size={18} /> Play
             </button>
-            <button className="px-6 py-3 rounded-lg border border-border bg-muted/50 hover:bg-muted text-foreground flex items-center gap-2 transition-colors">
-              <Plus size={18} /> My List
+            <button
+              onClick={toggleWatchlist}
+              className="px-6 py-3 rounded-lg border border-border bg-muted/50 hover:bg-muted text-foreground flex items-center gap-2 transition-colors"
+            >
+              {inWatchlist ? <Check size={18} /> : <Plus size={18} />}
+              {inWatchlist ? "In My List" : "My List"}
             </button>
           </div>
 
