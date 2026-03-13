@@ -31,17 +31,6 @@ const IntroScreen = ({ onComplete }: { onComplete: () => void }) => {
           {/* Lightning */}
           <div className="absolute inset-0 bg-moonlight/20 animate-lightning pointer-events-none" />
 
-          {/* Bats */}
-          {[0, 1, 2].map(i => (
-            <div
-              key={i}
-              className="absolute animate-bat text-foreground/60"
-              style={{ animationDelay: `${i * 3}s`, top: `${15 + i * 10}%`, fontSize: "24px" }}
-            >
-              🦇
-            </div>
-          ))}
-
           {/* Title */}
           {(phase === "title" || phase === "tagline") && (
             <motion.h1
