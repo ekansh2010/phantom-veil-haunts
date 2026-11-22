@@ -5,7 +5,7 @@ import fs from "fs";
 import helmet from "helmet";
 import path from "path";
 import { env, isProd, isTest } from "./config/env.js";
-import { connectDb, isDbConnected } from "./database/connection.js";
+import { connectDb, isDbConnected, waitForDb } from "./database/connection.js";
 import { apiNotFound, errorHandler } from "./middleware/error.middleware.js";
 import { apiLimiter } from "./middleware/rateLimit.middleware.js";
 import adminRoutes from "./routes/admin.routes.js";
@@ -64,8 +64,7 @@ export const createApp = (options: AppOptions = {}): Express => {
 
   // Health: connects first on a cold instance so it reports real DB reachability.
   const health = async (_req: Request, res: Response) => {
-    if (autoConnect && !isDbConnected()) await connectDb().catch(() => undefined);
-    const db = isDbConnected();
+    const db = autoConnect ? await waitForDb() : isDbConnected();
     res.status(db ? 200 : 503).json({ status: db ? "alive in the veil" : "degraded", db: db ? "connected" : "disconnected", time: new Date().toISOString() });
   };
   app.get("/health", health);
