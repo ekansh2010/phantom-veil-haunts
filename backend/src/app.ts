@@ -4,12 +4,13 @@ import express, { Express, NextFunction, Request, Response } from "express";
 import fs from "fs";
 import helmet from "helmet";
 import path from "path";
-import { env, isProd, isTest } from "./config/env.js";
+import { env, isProd, isTest, isTmdbConfigured } from "./config/env.js";
 import { connectDb, isDbConnected, waitForDb } from "./database/connection.js";
 import { apiNotFound, errorHandler } from "./middleware/error.middleware.js";
 import { apiLimiter } from "./middleware/rateLimit.middleware.js";
 import adminRoutes from "./routes/admin.routes.js";
 import authRoutes from "./routes/auth.routes.js";
+import cronRoutes from "./routes/cron.routes.js";
 import movieRoutes from "./routes/movie.routes.js";
 import profileRoutes from "./routes/profile.routes.js";
 import watchlistRoutes from "./routes/watchlist.routes.js";
@@ -65,7 +66,13 @@ export const createApp = (options: AppOptions = {}): Express => {
   // Health: connects first on a cold instance so it reports real DB reachability.
   const health = async (_req: Request, res: Response) => {
     const db = autoConnect ? await waitForDb() : isDbConnected();
-    res.status(db ? 200 : 503).json({ status: db ? "alive in the veil" : "degraded", db: db ? "connected" : "disconnected", time: new Date().toISOString() });
+    res.status(db ? 200 : 503).json({
+      status: db ? "alive in the veil" : "degraded",
+      db: db ? "connected" : "disconnected",
+      tmdb: isTmdbConfigured() ? "configured" : "not configured",
+      catalog: isTmdbConfigured() ? "tmdb" : "bundled+tvmaze",
+      time: new Date().toISOString(),
+    });
   };
   app.get("/health", health);
   app.get("/api/health", health);
@@ -88,6 +95,7 @@ export const createApp = (options: AppOptions = {}): Express => {
   app.use("/api/profile", profileRoutes);
   app.use("/api/watchlist", watchlistRoutes);
   app.use("/api/admin", adminRoutes);
+  app.use("/api/cron", cronRoutes);
   app.use("/api", apiNotFound);
 
   // Optional SPA hosting for single-server deployments (Render/Railway/Docker).

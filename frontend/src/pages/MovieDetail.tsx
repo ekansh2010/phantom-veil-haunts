@@ -1,11 +1,14 @@
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, Play, Plus, Check, Star, Clock, Calendar, X } from "lucide-react";
+import { ArrowLeft, Play, Plus, Check, Star, Clock, Calendar, X, Film } from "lucide-react";
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import Navbar from "@/components/Navbar";
 import MovieRow from "@/components/MovieRow";
+import SiteFooter from "@/components/SiteFooter";
+import WhereToWatch from "@/components/WhereToWatch";
+import { formatVotes, youtubeEmbedUrl } from "@/lib/movies";
 import type { Movie } from "@/data/movies";
 
 const getVidkingEmbedUrl = (movie: Movie) => {
@@ -19,6 +22,8 @@ const getVidkingEmbedUrl = (movie: Movie) => {
   return `https://www.vidking.net/embed/movie/${identifier}?color=${color}&autoPlay=true`;
 };
 
+const SEED_IDS = new Set(["1", "2", "3", "4", "5", "6", "7", "8"]);
+
 const MovieDetail = () => {
   const { id } = useParams();
   const { user } = useAuth();
@@ -27,11 +32,12 @@ const MovieDetail = () => {
   const [similarMovies, setSimilarMovies] = useState<Movie[]>([]);
   const [loading, setLoading] = useState(true);
   const [inWatchlist, setInWatchlist] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [player, setPlayer] = useState<"play" | "trailer" | null>(null);
 
   useEffect(() => {
     if (!id) return;
     setLoading(true);
+    setPlayer(null);
     fetch(`/api/movies/${id}`)
       .then(res => res.json())
       .then(data => {
@@ -128,63 +134,145 @@ const MovieDetail = () => {
     );
   }
 
+  const isSeed = SEED_IDS.has(movie.id);
+  const heroImage = movie.backdrop || movie.poster;
+  const genreChips = movie.genres?.length ? movie.genres : movie.genre.split(",").map((g) => g.trim()).filter(Boolean);
+  const releaseLabel = movie.releaseDate
+    ? new Date(`${movie.releaseDate}T00:00:00Z`).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" })
+    : String(movie.year);
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
 
       {/* Hero */}
-      <div className="relative h-[70vh] overflow-hidden">
-        <img src={movie.poster} alt={movie.title} className="absolute inset-0 w-full h-full object-cover" />
+      <div className="relative min-h-[70vh] overflow-hidden flex items-end">
+        <img src={heroImage} alt="" aria-hidden className="absolute inset-0 w-full h-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/70 to-background/30" />
         <div className="absolute inset-0 bg-gradient-to-r from-background/80 to-transparent" />
 
-        <div className="absolute bottom-0 left-0 right-0 p-6 md:p-16 z-10">
-          <Link to="/" className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6 transition-colors">
-            <ArrowLeft size={18} /> Back
-          </Link>
+        <div className="relative w-full p-6 pt-28 md:p-16 md:pt-32 z-10 flex gap-10 items-end">
+          {movie.backdrop && (
+            <img
+              src={movie.poster}
+              alt={`${movie.title} poster`}
+              className="hidden md:block w-48 lg:w-56 rounded-lg border border-red-950/40 shadow-[0_0_40px_rgba(0,0,0,0.8)]"
+            />
+          )}
+          <div className="max-w-3xl">
+            <Link to="/" className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6 transition-colors">
+              <ArrowLeft size={18} /> Back
+            </Link>
 
-          <motion.h1
-            className="font-horror text-4xl md:text-7xl text-foreground text-glow-moon tracking-wider"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            {movie.title}
-          </motion.h1>
-
-          <div className="flex items-center gap-6 mt-4 text-sm text-muted-foreground">
-            <span className="flex items-center gap-1 text-primary">
-              <Star size={16} fill="currentColor" /> {movie.rating}
-            </span>
-            <span className="flex items-center gap-1"><Clock size={14} /> {movie.duration}</span>
-            <span className="flex items-center gap-1"><Calendar size={14} /> {movie.year}</span>
-            <span className="px-2 py-0.5 border border-border rounded text-xs">{movie.genre}</span>
-          </div>
-
-          <p className="mt-4 text-foreground/80 max-w-xl text-sm md:text-base leading-relaxed">
-            {movie.description}
-          </p>
-
-          <div className="flex gap-4 mt-6">
-            <button 
-              onClick={() => setIsPlaying(true)}
-              className="btn-horror px-8 py-3 rounded-lg flex items-center gap-2 font-medium text-primary-foreground hover:scale-105 transition-transform"
+            <motion.h1
+              className="font-horror text-4xl md:text-7xl text-foreground text-glow-moon tracking-wider"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
             >
-              <Play size={18} /> Play
-            </button>
-            <button
-              onClick={toggleWatchlist}
-              className="px-6 py-3 rounded-lg border border-border bg-muted/50 hover:bg-muted text-foreground flex items-center gap-2 transition-colors"
-            >
-              {inWatchlist ? <Check size={18} /> : <Plus size={18} />}
-              {inWatchlist ? "In My List" : "My List"}
-            </button>
-          </div>
+              {movie.title}
+            </motion.h1>
+            {movie.originalTitle && movie.originalTitle !== movie.title && (
+              <p className="text-sm text-muted-foreground mt-1 italic">{movie.originalTitle}</p>
+            )}
+            {movie.tagline && <p className="mt-3 text-primary/90 italic tracking-wide">&ldquo;{movie.tagline}&rdquo;</p>}
 
-          <div className="mt-6">
-            <span className="text-xs text-muted-foreground uppercase tracking-wider">Cast</span>
-            <p className="text-sm text-foreground/70 mt-1">{movie.cast.join(" · ")}</p>
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-4 text-sm text-muted-foreground">
+              <span className="flex items-center gap-1 text-primary">
+                <Star size={16} fill="currentColor" /> {movie.rating}
+                {movie.voteCount ? <span className="text-xs text-muted-foreground ml-1">({formatVotes(movie.voteCount)} votes)</span> : null}
+              </span>
+              {movie.duration && (
+                <span className="flex items-center gap-1">
+                  <Clock size={14} /> {movie.duration}
+                </span>
+              )}
+              <span className="flex items-center gap-1">
+                <Calendar size={14} /> {releaseLabel}
+              </span>
+              {movie.certification && (
+                <span className="px-1.5 py-0.5 border border-foreground/40 rounded text-xs font-semibold text-foreground/80" title="Certification">
+                  {movie.certification}
+                </span>
+              )}
+            </div>
+
+            <div className="flex flex-wrap gap-2 mt-3">
+              {genreChips.map((g) => (
+                <span key={g} className="px-2 py-0.5 border border-border rounded text-xs">
+                  {g}
+                </span>
+              ))}
+            </div>
+
+            <p className="mt-4 text-foreground/80 max-w-2xl text-sm md:text-base leading-relaxed">{movie.description}</p>
+
+            <div className="flex flex-wrap gap-4 mt-6">
+              <button
+                onClick={() => setPlayer("play")}
+                className="btn-horror px-8 py-3 rounded-lg flex items-center gap-2 font-medium text-primary-foreground hover:scale-105 transition-transform"
+              >
+                <Play size={18} /> Play
+              </button>
+              {movie.trailerKey && (
+                <button
+                  onClick={() => setPlayer("trailer")}
+                  className="px-6 py-3 rounded-lg border border-red-950/40 bg-red-950/20 hover:bg-red-950/40 text-foreground flex items-center gap-2 transition-colors"
+                >
+                  <Film size={18} /> Trailer
+                </button>
+              )}
+              <button
+                onClick={toggleWatchlist}
+                className="px-6 py-3 rounded-lg border border-border bg-muted/50 hover:bg-muted text-foreground flex items-center gap-2 transition-colors"
+              >
+                {inWatchlist ? <Check size={18} /> : <Plus size={18} />}
+                {inWatchlist ? "In My List" : "My List"}
+              </button>
+            </div>
+
+            {movie.directors && movie.directors.length > 0 && (
+              <div className="mt-6">
+                <span className="text-xs text-muted-foreground uppercase tracking-wider">Directed by</span>
+                <p className="text-sm text-foreground/80 mt-1">{movie.directors.join(", ")}</p>
+              </div>
+            )}
+            {!movie.castDetails?.length && movie.cast.length > 0 && (
+              <div className="mt-6">
+                <span className="text-xs text-muted-foreground uppercase tracking-wider">Cast</span>
+                <p className="text-sm text-foreground/70 mt-1">{movie.cast.join(" · ")}</p>
+              </div>
+            )}
           </div>
         </div>
+      </div>
+
+      <div className="container mx-auto px-6 md:px-16 space-y-12 py-8">
+        {/* Cast with photos (TMDB titles) */}
+        {movie.castDetails && movie.castDetails.length > 0 && (
+          <section aria-labelledby="cast-heading">
+            <h2 id="cast-heading" className="font-horror text-2xl text-primary tracking-wider mb-4">
+              Cast
+            </h2>
+            <div className="flex gap-4 overflow-x-auto pb-2" style={{ scrollbarWidth: "thin" }}>
+              {movie.castDetails.map((c) => (
+                <div key={`${c.name}-${c.character}`} className="flex-shrink-0 w-28 text-center">
+                  <div className="w-28 h-36 rounded-lg overflow-hidden bg-muted/40 border border-red-950/30 flex items-center justify-center">
+                    {c.profile ? (
+                      <img src={c.profile} alt={c.name} loading="lazy" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="font-horror text-3xl text-muted-foreground">{c.name.charAt(0)}</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-foreground mt-2 font-medium leading-tight">{c.name}</p>
+                  {c.character && <p className="text-[11px] text-muted-foreground leading-tight">{c.character}</p>}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Where to watch (TMDB titles) */}
+        {movie.tmdbId !== undefined && <WhereToWatch providers={movie.providers ?? null} />}
       </div>
 
       {/* Similar */}
@@ -194,31 +282,32 @@ const MovieDetail = () => {
         </div>
       )}
 
+      <SiteFooter />
+
       {/* Video Player Modal */}
-      {isPlaying && (
-        <div className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-4 backdrop-blur-md">
+      {player && (
+        <div className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-4 backdrop-blur-md" role="dialog" aria-modal="true" aria-label={`${movie.title} ${player}`}>
           <div className="relative w-full max-w-5xl aspect-video bg-black rounded-lg overflow-hidden border border-red-950/40 shadow-[0_0_50px_rgba(220,38,38,0.35)]">
             <button
-              onClick={() => setIsPlaying(false)}
+              onClick={() => setPlayer(null)}
+              aria-label="Close player"
               className="absolute top-4 right-4 z-10 p-2 rounded-full bg-red-950/60 hover:bg-primary text-foreground transition-colors border border-red-950/40 shadow-[0_0_10px_rgba(220,38,38,0.4)]"
             >
               <X size={20} />
             </button>
-            {["1", "2", "3", "4", "5", "6", "7", "8"].includes(movie.id) ? (
+            {player === "trailer" && movie.trailerKey ? (
+              <iframe
+                src={youtubeEmbedUrl(movie.trailerKey)}
+                title={`${movie.title} Trailer`}
+                className="w-full h-full border-0"
+                allowFullScreen
+                allow="autoplay; encrypted-media; picture-in-picture"
+              />
+            ) : isSeed ? (
               movie.trailer ? (
-                <video
-                  src={movie.trailer}
-                  title={`${movie.title} Trailer`}
-                  className="w-full h-full object-cover"
-                  controls
-                  autoPlay
-                  playsInline
-                  loop
-                />
+                <video src={movie.trailer} title={`${movie.title} Trailer`} className="w-full h-full object-cover" controls autoPlay playsInline loop />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-muted-foreground font-horror">
-                  No preview available.
-                </div>
+                <div className="w-full h-full flex items-center justify-center text-muted-foreground font-horror">No preview available.</div>
               )
             ) : (
               <iframe

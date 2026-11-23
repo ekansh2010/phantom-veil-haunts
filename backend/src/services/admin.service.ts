@@ -3,9 +3,10 @@ import { HttpError } from "../utils/httpError.js";
 import { escapeRegex, paginate } from "../utils/helpers.js";
 import { deleteUserCascade } from "./auth.service.js";
 import { toPublicMovie, toPublicUser } from "./serializers.js";
+import { getTmdbSyncStatus } from "./tmdb/sync.service.js";
 
 export const getStats = async () => {
-  const [users, admins, movies, watchlistEntries, top] = await Promise.all([
+  const [users, admins, movies, watchlistEntries, top, bySource, tmdb] = await Promise.all([
     User.estimatedDocumentCount(),
     User.countDocuments({ role: "admin" }),
     Movie.estimatedDocumentCount(),
@@ -15,6 +16,8 @@ export const getStats = async () => {
       { $sort: { count: -1, _id: 1 } },
       { $limit: 5 },
     ]),
+    Movie.aggregate<{ _id: string; count: number }>([{ $group: { _id: "$source", count: { $sum: 1 } } }]),
+    getTmdbSyncStatus(),
   ]);
   // One query for all top titles (no N+1).
   const topMovies = await Movie.find({ id: { $in: top.map((t) => t._id) } }).lean<IMovie[]>();
@@ -24,6 +27,11 @@ export const getStats = async () => {
     admins,
     movies,
     watchlistEntries,
+    catalog: {
+      source: tmdb.configured && tmdb.tmdbMovies > 0 ? "tmdb" : "fallback",
+      moviesBySource: Object.fromEntries(bySource.map((b) => [b._id, b.count])),
+      tmdb: { ...tmdb, status: tmdb.configured ? "configured" : "not configured" },
+    },
     mostWatchlisted: top.map((t) => {
       const m = byId.get(t._id);
       return { movie_id: t._id, count: t.count, movie: m ? toPublicMovie(m) : null };

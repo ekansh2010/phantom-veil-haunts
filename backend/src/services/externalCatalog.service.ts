@@ -1,7 +1,11 @@
-import { env } from "../config/env.js";
+import { env, isTmdbConfigured } from "../config/env.js";
 import { backupTrailerFor } from "../data/catalog.js";
 import { IMovie, Movie, SyncState } from "../models/index.js";
 import { logger } from "../utils/logger.js";
+import { fetchAndStoreTmdbDetails, runTmdbSync } from "./tmdb/sync.service.js";
+
+/** Time a page request may spend refreshing TMDB rows when the daily cron hasn't run. */
+const ON_REQUEST_TMDB_BUDGET_MS = 4_000;
 
 type MovieInput = Omit<IMovie, "createdAt" | "updatedAt">;
 
@@ -62,30 +66,6 @@ export const mapTvMazeShow = (item: any, fallbackGenre = "Horror"): MovieInput |
   };
 };
 
-/** TMDB movie (discover result or detail) -> Movie. */
-export const mapTmdbMovie = (item: any, fallbackGenre = "Horror"): MovieInput | null => {
-  if (!item?.id || !(item.title || item.original_title)) return null;
-  const genre = Array.isArray(item.genres) && item.genres.length ? item.genres.map((g: any) => g.name).join(", ") : fallbackGenre;
-  const cast: string[] = Array.isArray(item.credits?.cast) ? item.credits.cast.slice(0, 4).map((c: any) => c?.name).filter(Boolean) : [];
-  const imdb = typeof item.imdb_id === "string" && /^tt\d{5,10}$/.test(item.imdb_id) ? item.imdb_id : undefined;
-  return {
-    id: `tmdb-${item.id}`,
-    title: String(item.title || item.original_title).slice(0, 200),
-    poster: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : FALLBACK_POSTER,
-    rating: Number(clamp(Number(item.vote_average ?? 0), 0, 10).toFixed(1)),
-    duration: formatRuntime(item.runtime, "1h 45m"),
-    year: yearOf(item.release_date),
-    description: String(item.overview || "No description available in the dark.").slice(0, 5000),
-    genre: genre.slice(0, 200),
-    cast,
-    trailer: backupTrailerFor(genre),
-    ...(imdb ? { imdbId: imdb } : {}),
-    mediaType: "movie",
-    source: "tmdb",
-    popularity: clamp(Math.round(Number(item.popularity ?? 0)), 0, 100),
-  };
-};
-
 const TVMAZE_QUERIES: Array<[string, string]> = [
   ["horror", "Horror"],
   ["ghost", "Supernatural Horror"],
@@ -99,23 +79,6 @@ const fetchTvMazeCatalog = async (): Promise<MovieInput[]> => {
     TVMAZE_QUERIES.map(async ([q, genre]) => {
       const hits = await fetchJson(`https://api.tvmaze.com/search/shows?q=${encodeURIComponent(q)}`);
       return Array.isArray(hits) ? hits.slice(0, 10).map((h) => mapTvMazeShow(h, genre)) : [];
-    }),
-  );
-  return results.flat().filter((m): m is MovieInput => m !== null);
-};
-
-const fetchTmdbCatalog = async (apiKey: string): Promise<MovieInput[]> => {
-  const base = `https://api.themoviedb.org/3/discover/movie?api_key=${encodeURIComponent(apiKey)}`;
-  const queries: Array<[string, string]> = [
-    [`${base}&with_genres=27&sort_by=popularity.desc`, "Horror"],
-    [`${base}&with_genres=27,9648&sort_by=vote_count.desc`, "Supernatural Horror"],
-    [`${base}&with_genres=27,53&sort_by=popularity.desc`, "Psychological Horror"],
-    [`${base}&with_genres=27&primary_release_date.lte=2000-01-01&sort_by=popularity.desc`, "Classic Horror"],
-  ];
-  const results = await Promise.all(
-    queries.map(async ([url, genre]) => {
-      const data = await fetchJson(url);
-      return Array.isArray(data?.results) ? data.results.slice(0, 10).map((m: any) => mapTmdbMovie(m, genre)) : [];
     }),
   );
   return results.flat().filter((m): m is MovieInput => m !== null);
@@ -150,7 +113,14 @@ export const syncExternalCatalog = async (now: Date = new Date()): Promise<void>
     if (state?.lastAttemptAt && now.getTime() - new Date(state.lastAttemptAt).getTime() < RETRY_BACKOFF_MS) return;
 
     await SyncState.updateOne({ key: SYNC_KEY }, { $set: { lastAttemptAt: now } }, { upsert: true });
-    const movies = env.TMDB_API_KEY ? await fetchTmdbCatalog(env.TMDB_API_KEY) : await fetchTvMazeCatalog();
+    if (isTmdbConfigured()) {
+      // TMDB is the primary source: run (part of) the resumable daily refresh. A completed
+      // pass marks this key as fresh; otherwise the next attempt after the back-off resumes it.
+      const result = await runTmdbSync({ mode: "daily", budgetMs: ON_REQUEST_TMDB_BUDGET_MS, now: () => now });
+      logger.info(result.message);
+      return;
+    }
+    const movies = await fetchTvMazeCatalog();
     if (!movies.length) {
       logger.warn("External catalog sync returned no titles; serving stored catalog");
       return;
@@ -172,10 +142,14 @@ export const fetchExternalMovie = async (id: string): Promise<IMovie | null> => 
   const tmdb = /^tmdb-(\d{1,9})$/.exec(id);
   if (tv) {
     mapped = mapTvMazeShow(await fetchJson(`https://api.tvmaze.com/shows/${tv[1]}?embed=cast`));
-  } else if (tmdb && env.TMDB_API_KEY) {
-    mapped = mapTmdbMovie(
-      await fetchJson(`https://api.themoviedb.org/3/movie/${tmdb[1]}?api_key=${encodeURIComponent(env.TMDB_API_KEY)}&append_to_response=credits`),
-    );
+  } else if (tmdb) {
+    if (!isTmdbConfigured()) return null;
+    try {
+      return await fetchAndStoreTmdbDetails(Number(tmdb[1]));
+    } catch (err) {
+      logger.warn(`TMDB lookup for ${id} failed`, err);
+      return null;
+    }
   }
   if (!mapped || mapped.id !== id) return null;
 

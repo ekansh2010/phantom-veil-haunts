@@ -15,7 +15,8 @@
     "test": "npm run test:backend && npm run test:frontend",
     "test:backend": "vitest run --config backend/vitest.config.ts",
     "test:frontend": "vitest run --root frontend",
-    "test:watch": "vitest --config backend/vitest.config.ts"
+    "test:watch": "vitest --config backend/vitest.config.ts",
+    "import:tmdb": "tsx backend/scripts/import-tmdb.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

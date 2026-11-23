@@ -20,6 +20,45 @@ export interface Movie {
   trailer?: string;
   imdbId?: string;
   mediaType?: "movie" | "tv";
+  // TMDB library fields (present for TMDB titles)
+  tmdbId?: number;
+  originalTitle?: string;
+  originalLanguage?: string;
+  tagline?: string;
+  backdrop?: string;
+  releaseDate?: string;
+  runtime?: number;
+  genres?: string[];
+  subgenres?: string[];
+  voteCount?: number;
+  certification?: string;
+  trailerKey?: string;
+  directors?: string[];
+  castDetails?: CastMember[];
+  keywords?: string[];
+  providers?: WatchProviders | null;
+}
+
+export interface CastMember {
+  name: string;
+  character?: string;
+  profile?: string;
+}
+
+export interface WatchProvider {
+  id: number;
+  name: string;
+  logo: string;
+}
+
+export interface WatchProviders {
+  region: string;
+  link?: string;
+  flatrate: WatchProvider[];
+  rent: WatchProvider[];
+  buy: WatchProvider[];
+  free: WatchProvider[];
+  ads: WatchProvider[];
 }
 
 const allMovies: Movie[] = [

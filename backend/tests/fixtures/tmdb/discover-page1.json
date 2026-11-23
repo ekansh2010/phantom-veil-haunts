@@ -1,0 +1,12 @@
+{
+  "page": 1,
+  "total_pages": 50,
+  "total_results": 1000,
+  "results": [
+    { "id": 493922, "title": "Hereditary", "original_title": "Hereditary", "original_language": "en", "overview": "When the matriarch of the Graham family passes away...", "poster_path": "/p9fmuz2Oj3HtEJEqbIwkFGUhVXD.jpg", "backdrop_path": "/4GFPuL14eXi66V96xBWY73Y9PfR.jpg", "release_date": "2018-06-07", "vote_average": 7.33, "vote_count": 8100, "popularity": 85.4, "genre_ids": [27, 9648, 53], "adult": false, "video": false },
+    { "id": 138843, "title": "The Conjuring", "original_title": "The Conjuring", "original_language": "en", "overview": "Paranormal investigators Ed and Lorraine Warren...", "poster_path": "/wVYREutTvI2tmxr6ujrHT704wGF.jpg", "backdrop_path": null, "release_date": "2013-07-18", "vote_average": 7.5, "vote_count": 11000, "popularity": 120.2, "genre_ids": [27, 53], "adult": false, "video": false },
+    { "id": 948, "title": "Halloween", "original_title": "Halloween", "original_language": "en", "overview": "Fifteen years after murdering his sister...", "poster_path": "/wijlZ3HaYMvlDTPqJoTCWKFkCPU.jpg", "backdrop_path": "/qTOM5tVUqBOMCGVdg1ZZsoZBBvy.jpg", "release_date": "1978-10-24", "vote_average": 7.6, "vote_count": 5600, "popularity": 40.1, "genre_ids": [27, 53], "adult": false, "video": false },
+    { "id": 1, "title": "Not Horror At All", "original_title": "Not Horror At All", "overview": "A romcom.", "poster_path": null, "release_date": "2020-01-01", "vote_average": 6, "vote_count": 10, "popularity": 5, "genre_ids": [35, 10749] },
+    { "id": 2, "overview": "missing title" }
+  ]
+}

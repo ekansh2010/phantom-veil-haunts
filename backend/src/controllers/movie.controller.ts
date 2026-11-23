@@ -13,6 +13,16 @@ export const search = async (req: Request, res: Response) => {
   res.json(await movieService.searchMovies(q, genre, page, limit));
 };
 
+export const browse = async (req: Request, res: Response) => {
+  res.set("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=600");
+  res.json(await movieService.browseMovies(req.query as unknown as movieService.BrowseQuery));
+};
+
+export const meta = async (_req: Request, res: Response) => {
+  res.set("Cache-Control", "public, max-age=60, s-maxage=300");
+  res.json(await movieService.getCatalogMeta());
+};
+
 export const getMovie = async (req: Request<Params>, res: Response) => {
   res.json(await movieService.getMovie(req.params.id));
 };

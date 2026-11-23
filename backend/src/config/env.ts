@@ -32,7 +32,16 @@ const buildSchema = (nodeEnv: "development" | "production" | "test") =>
     RATE_LIMIT_ENABLED: booleanFromEnv(nodeEnv !== "test"),
     EXTERNAL_CATALOG_ENABLED: booleanFromEnv(nodeEnv !== "test"),
     EXTERNAL_SYNC_TTL_HOURS: z.coerce.number().positive().default(24),
-    TMDB_API_KEY: z.string().optional(),
+    /** TMDB v3 API key (sent as the `api_key` query param). Optional. */
+    TMDB_API_KEY: z.string().trim().optional(),
+    /** TMDB v4 "API Read Access Token" (sent as `Authorization: Bearer`). Preferred over TMDB_API_KEY. Optional. */
+    TMDB_READ_TOKEN: z.string().trim().optional(),
+    /** Watch-provider region (ISO 3166-1); US is used as a fallback. */
+    TMDB_REGION: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/).default("IN"),
+    /** How long fetched detail data (videos, credits, providers) stays fresh. */
+    TMDB_DETAILS_TTL_HOURS: z.coerce.number().positive().default(168),
+    /** Shared secret for /api/cron/* (Vercel Cron sends `Authorization: Bearer <CRON_SECRET>`). */
+    CRON_SECRET: z.string().trim().optional(),
     TRUST_PROXY: z.coerce.number().int().min(0).default(1),
     LOG_LEVEL: z.enum(["debug", "info", "warn", "error", "silent"]).default(nodeEnv === "test" ? "silent" : "info"),
   });
@@ -63,4 +72,15 @@ export const loadEnv = (source: NodeJS.ProcessEnv = process.env): Env => {
 export const env: Env = loadEnv();
 
 export const isProd = env.NODE_ENV === "production";
+
+/** TMDB credentials, read at call time (tests toggle them). null when TMDB isn't configured. */
+export const tmdbCredentials = (): { readToken?: string; apiKey?: string } | null => {
+  const readToken = env.TMDB_READ_TOKEN?.trim();
+  const apiKey = env.TMDB_API_KEY?.trim();
+  if (readToken) return { readToken };
+  if (apiKey) return { apiKey };
+  return null;
+};
+
+export const isTmdbConfigured = (): boolean => tmdbCredentials() !== null;
 export const isTest = env.NODE_ENV === "test";

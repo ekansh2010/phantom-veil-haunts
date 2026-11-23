@@ -13,6 +13,11 @@ const MovieCard = ({ movie }: { movie: Movie }) => (
         alt={movie.title}
         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
         loading="lazy"
+        onError={e => {
+          // Missing/expired remote poster: fall back to a bundled one (once).
+          const img = e.currentTarget;
+          if (!img.src.endsWith("/posters/poster3.jpg")) img.src = "/posters/poster3.jpg";
+        }}
       />
       {/* Red/Black mist gradient rise overlay on hover */}
       <div className="absolute inset-0 bg-gradient-to-t from-deep-black via-red-950/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-400" />

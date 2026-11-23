@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SUBGENRE_KEYS } from "../services/tmdb/subgenres.js";
 
 // ---------- shared ----------
 
@@ -89,6 +90,27 @@ export const searchMoviesQuery = z.object({
   ...pageQuery,
 });
 
+/** Empty query values ("?decade=") mean "no filter". */
+const optionalNumber = (schema: z.ZodType<number>) => z.preprocess((v) => (v === "" || v === undefined ? undefined : v), z.coerce.number().pipe(schema).optional());
+
+export const browseMoviesQuery = z.object({
+  subgenre: z.preprocess((v) => (v === "" ? undefined : v), z.enum(SUBGENRE_KEYS).optional()),
+  decade: optionalNumber(
+    z
+      .number()
+      .int()
+      .min(1900)
+      .max(2100)
+      .refine((d) => d % 10 === 0, "decade must be a multiple of 10"),
+  ),
+  yearFrom: optionalNumber(z.number().int().min(1870).max(2100)),
+  yearTo: optionalNumber(z.number().int().min(1870).max(2100)),
+  minRating: optionalNumber(z.number().min(0).max(10)),
+  sort: z.enum(["popularity", "rating", "newest", "oldest", "title"]).default("popularity"),
+  page: z.coerce.number().int().min(1).max(500).default(1),
+  limit: z.coerce.number().int().min(1).max(50).default(24),
+});
+
 const movieFields = {
   title: z.string().trim().min(1, "Title is required").max(200),
   poster: safeUrl.default(""),
@@ -135,3 +157,8 @@ export const listUsersQuery = z.object({
 });
 
 export const updateRoleSchema = z.object({ role: z.enum(["user", "admin"]) });
+
+export const tmdbSyncSchema = z.object({
+  mode: z.enum(["daily", "full"]).default("daily"),
+  reset: z.boolean().default(false),
+});

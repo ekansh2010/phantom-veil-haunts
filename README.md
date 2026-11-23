@@ -19,10 +19,12 @@ Phantom Veil is a horror movie hub: browse curated and live horror titles, watch
 
 ## Features
 
-- **Catalog**: home-page rows (Trending, New Nightmares, Supernatural, Psychological, Classic, Zombie, Haunted House) built from MongoDB.
-- **Live titles**: horror shows are synced from TVmaze (or TMDB when `TMDB_API_KEY` is set) into MongoDB at most once per 24 h, shared by every serverless instance. If the upstream API fails, the stored catalog is still served.
-- **Movie detail and recommendations**: unknown `tv-*` / `tmdb-*` ids are fetched on demand, so deep links work.
-- **Search**: by title, description, genre or cast, with pagination. User input is regex-escaped.
+- **Horror movie library (TMDB)**: once a TMDB credential is set, TMDB is the primary source. About 1000 popular horror movies plus top-rated, now playing, upcoming, classic (pre-1980) and sub-genre collections (Supernatural, Psychological, Slasher, Zombie, Haunted House) are imported into MongoDB (upsert by `tmdbId`, idempotent) and refreshed daily by a Vercel Cron job. See [Enable TMDB](#enable-tmdb).
+- **Fallback catalog**: without a TMDB credential the app works exactly as before: the bundled titles plus horror shows synced from TVmaze at most once per 24 h. If an upstream API fails, the stored catalog is still served.
+- **Rows**: Trending, New Nightmares, Top Rated, the sub-genres, Classic and Coming Soon (TMDB mode), each with a "See all" link into Browse.
+- **Browse**: `/browse` with sub-genre, decade, minimum rating and sort filters, and infinite scroll. Works for both data sources.
+- **Movie detail**: backdrop, tagline, runtime, certification, rating and vote count, genres, director, cast with photos, YouTube trailer, and "Where to watch" providers (region `TMDB_REGION`, default IN, then US) with TMDB/JustWatch attribution. Videos, credits and providers are fetched lazily on the first view and cached for `TMDB_DETAILS_TTL_HOURS`. Unknown `tv-*` / `tmdb-*` ids are fetched on demand, so deep links work.
+- **Search**: by title, original title, description, genre, cast or director, with pagination. With TMDB enabled, queries with few local hits also ask TMDB `/search/movie` (horror results only, stored; each query at most once a day). User input is regex-escaped.
 - **Accounts**: register, login, logout (revokes tokens), change password, forgot/reset password (hashed, single-use, 1 h tokens).
 - **Profile**: username, favourite genre, avatar URL.
 - **Watchlist**: toggle, idempotent add, remove. Returns movie details from one `$in` query.
@@ -42,6 +44,8 @@ backend/src/
   middleware/           auth (JWT + DB reload), validate (Zod), rateLimit, error handler
   controllers/          thin HTTP adapters
   services/             business logic (auth, movies, external catalog, watchlist, profile, admin)
+  services/tmdb/        TMDB client (rate limit, retries), mappers, sub-genres, resumable sync/import
+backend/scripts/        import-tmdb.ts (npm run import:tmdb)
   models/               Mongoose schemas (User, Movie, WatchlistEntry, SyncState)
   validation/schemas.ts Zod schemas for every body/params/query
 backend/tests/          vitest + supertest + mongodb-memory-server
@@ -111,6 +115,15 @@ The original code called a Supabase project (`eilxwnpwnwtrqwbppmvr.supabase.co`)
 - [x] Production env vars set on Vercel; production deploy is live and passed a 22-check smoke test
 - [x] `render.yaml` and `Procfile` updated for single-server hosting
 
+### TMDB horror library
+- [x] TMDB v3 client: `TMDB_READ_TOKEN` (Bearer) or `TMDB_API_KEY` (`api_key`), 8 s timeout, retries with backoff on 429 (honours `Retry-After`), 5xx and network errors, shared limiter (~35 requests / 10 s)
+- [x] Mappers to the extended Movie model (tmdbId, original title, tagline, poster `w500` / backdrop `original` URLs, release date, runtime, genres, votes, popularity, certification, language, YouTube trailer, cast, director, keywords, watch providers)
+- [x] Resumable, idempotent import plan (cursor saved after every page in `SyncState`) so it fits in a serverless function; daily cron + admin endpoint + local script
+- [x] Lazy detail fetch (one request with `append_to_response`), cached with a freshness timestamp; TMDB failures fall back to the stored copy
+- [x] No-key mode unchanged; health, meta and admin stats report whether TMDB is configured
+- [x] Bundled titles and existing watchlist entries keep resolving in TMDB mode (rows/browse just switch to TMDB titles)
+- [x] Footer attribution: "This product uses the TMDB API but is not endorsed or certified by TMDB."
+
 ### Open follow-ups
 - [ ] Wire a real email provider (SMTP/Resend) for password-reset emails. Production currently doesn't send the link; development logs it
 - [ ] Admin UI in the frontend (the admin API is complete)
@@ -125,10 +138,12 @@ The original code called a Supabase project (`eilxwnpwnwtrqwbppmvr.supabase.co`)
 
 | Suite | Files | Tests |
 |---|---|---|
-| Backend integration (`backend/tests/integration`): app, auth, movies, watchlist, profile, admin, seed, external catalog | 8 | 89 |
-| Backend unit (`backend/tests/unit`): env, helpers/serializers, validation, mappers | 4 | 28 |
-| Frontend (`frontend/src/test`): useAuth, api helpers, ResetPassword, example | 4 | 14 |
-| **Total** | **16** | **131** |
+| Backend integration (`backend/tests/integration`): app, auth, movies, watchlist, profile, admin, seed, external catalog, TMDB library, cron/admin sync | 10 | 113 |
+| Backend unit (`backend/tests/unit`): env, helpers/serializers, validation, TVmaze mappers, TMDB mappers/plan, TMDB client/limiter | 6 | 45 |
+| Frontend (`frontend/src/test`): useAuth, api helpers, ResetPassword, movies (helpers, attribution, Browse), example | 5 | 21 |
+| **Total** | **21** | **179** |
+
+TMDB tests use fixture JSON (`backend/tests/fixtures/tmdb`) and a mocked `fetch`; no key or network is needed.
 
 ```bash
 npm test               # backend + frontend
@@ -169,7 +184,11 @@ Single-server mode: `npm run build && npm start` serves the API and the built SP
 | `SEED_DEMO_DATA` | no | true (dev) / false (prod) | Seed catalog and demo users into an empty DB |
 | `EXTERNAL_CATALOG_ENABLED` | no | true (false in tests) | TVmaze/TMDB sync |
 | `EXTERNAL_SYNC_TTL_HOURS` | no | `24` | Sync interval |
-| `TMDB_API_KEY` | no | none | Use TMDB instead of TVmaze |
+| `TMDB_READ_TOKEN` | no | none | TMDB API Read Access Token (preferred). Makes TMDB the primary source |
+| `TMDB_API_KEY` | no | none | TMDB v3 API key (alternative to the read token) |
+| `TMDB_REGION` | no | `IN` | Watch-provider region (US is the fallback) |
+| `TMDB_DETAILS_TTL_HOURS` | no | `168` | How long cached videos/credits/providers stay fresh |
+| `CRON_SECRET` | prod | none | Protects `GET /api/cron/sync` (Vercel Cron sends it as a Bearer token) |
 | `RATE_LIMIT_ENABLED` | no | true (false in tests) | Rate limiting |
 | `TRUST_PROXY` | no | `1` | Proxy hops (correct client IPs) |
 | `LOG_LEVEL` | no | `info` | `debug` / `info` / `warn` / `error` / `silent` |
@@ -190,6 +209,32 @@ npx vercel deploy --prod
 
 Atlas must allow connections from Vercel (Network Access `0.0.0.0/0`, or Vercel's egress IPs).
 
+### Enable TMDB
+
+The app runs without TMDB. To turn it into the full horror movie library:
+
+1. Create a free account at [themoviedb.org](https://www.themoviedb.org/signup), then go to **Settings → API** and request an API key (choose "Developer", fill in the short form).
+2. On the same page, copy the **API Read Access Token** (the long token, not the short "API Key").
+3. In this project folder, add it to Vercel production and paste the token when prompted:
+   ```bash
+   npx vercel env add TMDB_READ_TOKEN production
+   ```
+4. Redeploy so the function picks it up: `npx vercel deploy --prod` (or push a commit to `main`).
+5. Fill the library (about 1000 titles), either:
+   - **Locally (fastest)**: put `TMDB_READ_TOKEN=...` and the production `MONGODB_URI=...` in your local `.env`, then run
+     ```bash
+     npm run import:tmdb                  # full import; resumes if interrupted
+     npm run import:tmdb -- --mode=daily  # just the first pages of every list
+     npm run import:tmdb -- --reset       # start over from page 1
+     ```
+     The script connects with plain mongoose (no seeding), forces public DNS (8.8.8.8 / 1.1.1.1) for `mongodb+srv` lookups, and only upserts TMDB titles.
+   - **Or from the API**: as an admin, call `POST /api/admin/sync/tmdb` with `{"mode":"full"}` repeatedly until the response says `"done": true` (each call works for about 25 s and saves its position).
+6. Check it: `/api/health` shows `"tmdb":"configured"`, `/api/movies/meta` shows `"source":"tmdb"`, and the home page shows TMDB rows.
+
+After that, the daily cron (`vercel.json` → `GET /api/cron/sync` at 03:30 UTC) refreshes the first pages of every list and then continues the deep import from where it stopped. It needs `CRON_SECRET` set in Vercel (already set for production). Without a TMDB credential the cron and the admin sync return 200 with a "not configured" message and do nothing.
+
+TMDB terms: the footer shows the required notice, and "Where to watch" credits TMDB and JustWatch. There is no CSP; if you add one, allow `image.tmdb.org` (images) and `www.youtube-nocookie.com` (trailers).
+
 ### Render / Railway / Docker
 
 `render.yaml` and `Procfile` run `npm run build` and then `npm start` (`tsx backend/index.ts`), which serves the API and the SPA from one process. Set the same env vars.
@@ -203,7 +248,12 @@ All responses are JSON. Errors look like `{ "error": "message", "details"?: [{ "
 ### Health
 | Method | Path | Auth | Notes |
 |---|---|---|---|
-| GET | `/api/health` | none | `200 {status, db:"connected"}` or `503` |
+| GET | `/api/health` | none | `200 {status, db:"connected", tmdb:"configured" or "not configured", catalog}` or `503` |
+
+### Cron
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| GET | `/api/cron/sync` | `Authorization: Bearer <CRON_SECRET>` | 401 without the secret. No TMDB key: `200 {skipped:true}`. Otherwise runs the daily refresh, then continues the full import (40 s budget) |
 
 ### Auth (`/api/auth`)
 | Method | Path | Auth | Body | Response |
@@ -222,14 +272,16 @@ Passwords: 8 to 128 chars, with at least one letter and one digit.
 | Method | Path | Auth | Notes |
 |---|---|---|---|
 | GET | `/` | none | `[{title, movies: Movie[]}]` category rows |
-| GET | `/search?q=&genre=&page=&limit=` | none | `{items, total, page, limit, totalPages}` (limit at most 50) |
-| GET | `/:id` | none | `Movie` (fetches `tv-*`/`tmdb-*` on demand), 404 otherwise |
+| GET | `/search?q=&genre=&page=&limit=` | none | `{items, total, page, limit, totalPages}` (limit at most 50). Falls back to TMDB search when configured |
+| GET | `/browse?subgenre=&decade=&yearFrom=&yearTo=&minRating=&sort=&page=&limit=` | none | Paginated, plus `source` (`tmdb` or `fallback`). `subgenre`: supernatural, psychological, slasher, zombie, haunted-house, classic. `sort`: popularity, rating, newest, oldest, title |
+| GET | `/meta` | none | `{source, tmdbConfigured, subgenres[], sorts[]}` |
+| GET | `/:id` | none | `Movie` with detail fields (fetches `tv-*`/`tmdb-*` on demand; TMDB details lazily), 404 otherwise |
 | GET | `/:id/similar` | none | Up to 8 titles, same genre first |
 | POST | `/` | admin | Create (`title`, `year` required) -> 201 |
 | PATCH | `/:id` | admin | Partial update |
 | DELETE | `/:id` | admin | 204; also removes it from watchlists |
 
-`Movie = {id, title, poster, rating, duration, year, description, genre, cast[], trailer?, imdbId?, mediaType}`
+`Movie = {id, title, poster, rating, duration, year, description, genre, cast[], trailer?, imdbId?, mediaType}`, plus for TMDB titles `tmdbId, originalTitle, originalLanguage, tagline, backdrop, releaseDate, runtime, genres[], subgenres[], voteCount, certification, trailerKey, directors[]`, and on the detail endpoint `castDetails[{name, character, profile}], keywords[], providers{region, link, flatrate[], rent[], buy[], free[], ads[]}`. Category rows also carry a `key`.
 
 ### Watchlist (`/api/watchlist`, user)
 | Method | Path | Body | Response |
@@ -248,7 +300,8 @@ Passwords: 8 to 128 chars, with at least one letter and one digit.
 ### Admin (`/api/admin`, admin only: 401 anonymous, 403 for users)
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/stats` | `{users, admins, movies, watchlistEntries, mostWatchlisted[]}` |
+| GET | `/stats` | `{users, admins, movies, watchlistEntries, catalog: {source, moviesBySource, tmdb: {configured, status, tmdbMovies, daily, full}}, mostWatchlisted[]}` |
+| POST | `/sync/tmdb` | `{mode?: "daily" or "full", reset?: boolean}` runs about 25 s of the resumable import; repeat until `done`. 200 no-op without a TMDB key |
 | GET | `/users?q=&page=&limit=` | Paginated user search |
 | PATCH | `/users/:id/role` | `{role: "user" or "admin"}`; revokes the target's sessions; no self-demotion |
 | DELETE | `/users/:id` | 204; cascades the watchlist; no self-deletion |

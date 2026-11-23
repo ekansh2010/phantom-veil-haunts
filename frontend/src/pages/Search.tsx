@@ -1,43 +1,47 @@
-import { useState, useMemo, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { Search as SearchIcon, ArrowLeft } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import Navbar from "@/components/Navbar";
 import MovieCard from "@/components/MovieCard";
-import type { Movie } from "@/data/movies";
+import SiteFooter from "@/components/SiteFooter";
+import { fetchBrowse, fetchSearch } from "@/lib/movies";
 
+const PAGE_SIZE = 24;
+
+/** Server-side search (title, cast, director, genre). With TMDB enabled, unknown titles are looked up there too. */
 const Search = () => {
-  const [query, setQuery] = useState("");
-  const [movies, setMovies] = useState<Movie[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [params, setParams] = useSearchParams();
+  const [query, setQuery] = useState(params.get("q") ?? "");
+  const [debounced, setDebounced] = useState(query.trim());
 
   useEffect(() => {
-    fetch("/api/movies")
-      .then(res => res.json())
-      .then(data => {
-        if (Array.isArray(data)) {
-          const uniqueMap = new Map<string, Movie>();
-          data.forEach((cat: { movies?: Movie[] }) => {
-            if (Array.isArray(cat.movies)) {
-              cat.movies.forEach((m: Movie) => {
-                uniqueMap.set(m.id, m);
-              });
-            }
-          });
-          setMovies(Array.from(uniqueMap.values()));
-        }
-      })
-      .catch(err => console.error("Error loading movies for search:", err))
-      .finally(() => setLoading(false));
-  }, []);
+    const t = setTimeout(() => setDebounced(query.trim()), 350);
+    return () => clearTimeout(t);
+  }, [query]);
 
-  const results = useMemo(() => {
-    if (!query.trim()) return movies;
-    const q = query.toLowerCase();
-    return movies.filter(
-      m => m.title.toLowerCase().includes(q) || m.genre.toLowerCase().includes(q) || String(m.year).includes(q)
-    );
-  }, [query, movies]);
+  useEffect(() => {
+    const next = new URLSearchParams(params);
+    if (debounced) next.set("q", debounced);
+    else next.delete("q");
+    if (next.toString() !== params.toString()) setParams(next, { replace: true });
+  }, [debounced, params, setParams]);
+
+  const results = useInfiniteQuery({
+    queryKey: ["search", debounced],
+    // Empty query: show the most popular titles instead of nothing.
+    queryFn: ({ pageParam }) => (debounced ? fetchSearch(debounced, pageParam, PAGE_SIZE) : fetchBrowse({ sort: "popularity" }, pageParam, PAGE_SIZE)),
+    initialPageParam: 1,
+    getNextPageParam: (last) => (last.page < last.totalPages ? last.page + 1 : undefined),
+    staleTime: 60_000,
+  });
+
+  const movies = useMemo(() => {
+    const seen = new Set<string>();
+    return (results.data?.pages ?? []).flatMap((p) => p.items).filter((m) => (seen.has(m.id) ? false : (seen.add(m.id), true)));
+  }, [results.data]);
+  const total = results.data?.pages[0]?.total ?? 0;
 
   return (
     <div className="min-h-screen bg-background">
@@ -49,34 +53,57 @@ const Search = () => {
         </Link>
         <h1 className="font-horror text-3xl text-primary text-glow-red tracking-wider mb-6">Search</h1>
 
-        <div className="relative max-w-lg mb-8">
+        <div className="relative max-w-lg mb-3">
           <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
           <Input
-            placeholder="Search by title, genre, or year..."
+            aria-label="Search movies"
+            placeholder="Search by title, cast, director or genre..."
             value={query}
-            onChange={e => setQuery(e.target.value)}
+            onChange={(e) => setQuery(e.target.value)}
             className="pl-10 bg-muted border-border focus:border-primary"
-            disabled={loading}
+            autoFocus
           />
         </div>
+        <p className="text-xs text-muted-foreground mb-8">
+          {results.isSuccess && (debounced ? `${total} result${total === 1 ? "" : "s"} for "${debounced}"` : "Popular right now")}
+          {" · "}
+          <Link to="/browse" className="text-primary hover:underline">
+            Browse with filters
+          </Link>
+        </p>
 
-        {loading ? (
+        {results.isPending ? (
           <div className="py-12 text-center">
             <div className="inline-block w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
             <p className="text-muted-foreground mt-4 font-horror text-sm tracking-widest">Searching the shadows...</p>
           </div>
+        ) : results.isError ? (
+          <p className="text-muted-foreground text-center mt-12">The search was swallowed by the dark. Try again.</p>
         ) : (
           <>
             <div className="flex flex-wrap gap-4">
-              {results.map(m => <MovieCard key={m.id} movie={m} />)}
+              {movies.map((m) => (
+                <MovieCard key={m.id} movie={m} />
+              ))}
             </div>
 
-            {results.length === 0 && (
-              <p className="text-muted-foreground text-center mt-12">No movies found in the shadows...</p>
+            {movies.length === 0 && <p className="text-muted-foreground text-center mt-12">No movies found in the shadows...</p>}
+
+            {results.hasNextPage && (
+              <div className="mt-10 text-center">
+                <button
+                  onClick={() => results.fetchNextPage()}
+                  disabled={results.isFetchingNextPage}
+                  className="btn-horror px-8 py-3 rounded-lg font-horror tracking-wider text-primary-foreground disabled:opacity-60"
+                >
+                  {results.isFetchingNextPage ? "Summoning..." : "Load more"}
+                </button>
+              </div>
             )}
           </>
         )}
       </div>
+      <SiteFooter />
     </div>
   );
 };

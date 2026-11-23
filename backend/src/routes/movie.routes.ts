@@ -3,13 +3,15 @@ import * as c from "../controllers/movie.controller.js";
 import { authenticate, requireAdmin } from "../middleware/auth.middleware.js";
 import { writeLimiter } from "../middleware/rateLimit.middleware.js";
 import { validate } from "../middleware/validate.middleware.js";
-import { createMovieSchema, movieIdParams, searchMoviesQuery, updateMovieSchema } from "../validation/schemas.js";
+import { browseMoviesQuery, createMovieSchema, movieIdParams, searchMoviesQuery, updateMovieSchema } from "../validation/schemas.js";
 
 const router = Router();
 
-// Public reads ("/search" is registered before "/:id" so it is not treated as an id)
+// Public reads ("/search", "/browse", "/meta" are registered before "/:id" so they are not treated as ids)
 router.get("/", c.getCategories);
 router.get("/search", validate(searchMoviesQuery, "query"), c.search);
+router.get("/browse", validate(browseMoviesQuery, "query"), c.browse);
+router.get("/meta", c.meta);
 router.get("/:id", validate(movieIdParams, "params"), c.getMovie);
 router.get("/:id/similar", validate(movieIdParams, "params"), c.getSimilar);
 

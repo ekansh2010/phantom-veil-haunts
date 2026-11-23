@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapTmdbMovie, mapTvMazeShow } from "../../src/services/externalCatalog.service";
+import { mapTvMazeShow } from "../../src/services/externalCatalog.service";
 
 describe("mapTvMazeShow", () => {
   it("maps a search hit, stripping HTML and namespacing the id", () => {
@@ -24,19 +24,3 @@ describe("mapTvMazeShow", () => {
   });
 });
 
-describe("mapTmdbMovie", () => {
-  it("maps a TMDB detail payload", () => {
-    const m = mapTmdbMovie({
-      id: 9, title: "Hereditary", vote_average: 7.33, runtime: 127, release_date: "2018-06-07", overview: "Grief.", poster_path: "/p.jpg",
-      genres: [{ name: "Horror" }, { name: "Mystery" }], credits: { cast: [{ name: "Toni Collette" }] }, imdb_id: "tt7784604", popularity: 250,
-    });
-    expect(m).toMatchObject({
-      id: "tmdb-9", title: "Hereditary", rating: 7.3, duration: "2h 07m", year: 2018, poster: "https://image.tmdb.org/t/p/w500/p.jpg",
-      genre: "Horror, Mystery", cast: ["Toni Collette"], imdbId: "tt7784604", mediaType: "movie", source: "tmdb", popularity: 100,
-    });
-  });
-
-  it("returns null without id/title", () => {
-    expect(mapTmdbMovie({ id: 1 })).toBeNull();
-  });
-});
