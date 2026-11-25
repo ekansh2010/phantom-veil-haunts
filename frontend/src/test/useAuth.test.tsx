@@ -95,6 +95,27 @@ describe("AuthProvider", () => {
     expect(screen.getByTestId("state").textContent).toBe("anon");
   });
 
+  it("signOut clears the session before the (token-revoking) logout call returns", async () => {
+    localStorage.setItem(TOKEN_KEY, "tok");
+    fetchMock.mockResolvedValueOnce(json({ user }));
+    renderAuth();
+    await waitFor(() => expect(screen.getByTestId("state").textContent).toBe("user:Raven"));
+    let finishLogout: (r: Response) => void = () => {};
+    fetchMock.mockReturnValueOnce(new Promise<Response>((r) => (finishLogout = r)));
+    let done: Promise<void> = Promise.resolve();
+    act(() => {
+      done = ctx.signOut();
+    });
+    // Logout still in flight: nothing may keep using the revoked token.
+    expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
+    expect(screen.getByTestId("state").textContent).toBe("anon");
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/auth/logout", { method: "POST", headers: { Authorization: "Bearer tok" } });
+    await act(async () => {
+      finishLogout(json({ message: "Signed out" }));
+      await done;
+    });
+  });
+
   it("resetPassword posts to /api/auth/forgot-password", async () => {
     renderAuth();
     fetchMock.mockResolvedValueOnce(json({ message: "ok" }));

@@ -2,13 +2,26 @@ import type { IMovie } from "../models/index.js";
 
 type SeedMovie = Omit<IMovie, "createdAt" | "updatedAt">;
 
+/** Royalty-free Mixkit stock clips (Mixkit License). */
+const mixkitClip = (id: number) => `https://assets.mixkit.co/videos/${id}/${id}-720.mp4`;
+
 const TRAILERS = {
-  fogWalk: "https://assets.mixkit.co/videos/preview/mixkit-mysterious-foggy-spooky-forest-41618-large.mp4",
-  cabin: "https://assets.mixkit.co/videos/preview/mixkit-creepy-wooden-cabin-in-a-dark-forest-41620-large.mp4",
-  bwForest: "https://assets.mixkit.co/videos/preview/mixkit-foggy-dark-forest-in-black-and-white-41619-large.mp4",
-  facePaint: "https://assets.mixkit.co/videos/preview/mixkit-person-with-a-scary-painted-face-41622-large.mp4",
-  lightning: "https://assets.mixkit.co/videos/preview/mixkit-lightnings-in-a-dark-stormy-sky-41621-large.mp4",
+  fogWalk: mixkitClip(41618),
+  cabin: mixkitClip(41620),
+  bwForest: mixkitClip(41619),
+  facePaint: mixkitClip(41622),
+  lightning: mixkitClip(41621),
 } as const;
+
+/**
+ * Mixkit retired its old `/videos/preview/mixkit-<slug>-<id>-large.mp4` URLs (they now answer 403).
+ * Rows seeded before the move still store them, so rewrite to the current URL on the way out.
+ */
+const LEGACY_MIXKIT = /^https:\/\/assets\.mixkit\.co\/videos\/preview\/mixkit-[a-z0-9-]*?-(\d+)-large\.mp4$/i;
+export const normalizeTrailerUrl = (url: string): string => {
+  const m = LEGACY_MIXKIT.exec(url);
+  return m ? mixkitClip(Number(m[1])) : url;
+};
 
 /** Picks an atmospheric looping clip for titles without a real trailer. */
 export const backupTrailerFor = (genre: string = ""): string => {

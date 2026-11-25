@@ -87,14 +87,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signIn = (email: string, password: string) => authenticate("/api/auth/login", { email, password }, "Login failed");
 
   const signOut = async () => {
-    if (getToken()) {
+    // Clear the local session first: the logout call revokes the token server-side, so any request
+    // still made with it (e.g. by the page we navigate to) would fail with 401.
+    const headers = authHeaders();
+    applySession(null, null);
+    if (headers.Authorization) {
       try {
-        await fetch("/api/auth/logout", { method: "POST", headers: authHeaders() });
+        await fetch("/api/auth/logout", { method: "POST", headers });
       } catch (err) {
         console.error("Error signing out:", err);
       }
     }
-    applySession(null, null);
   };
 
   const resetPassword = async (email: string) => {

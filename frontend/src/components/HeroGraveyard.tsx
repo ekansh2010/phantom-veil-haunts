@@ -532,8 +532,9 @@ const HeroGraveyard = ({ onEnterHorror }: { onEnterHorror?: () => void }) => {
         </div>
 
         {/* Scroll Indicator */}
-        <motion.div
-          className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5 cursor-pointer z-20"
+        <motion.button
+          type="button"
+          className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5 cursor-pointer z-20 bg-transparent border-0"
           onClick={onEnterHorror}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -552,7 +553,7 @@ const HeroGraveyard = ({ onEnterHorror }: { onEnterHorror?: () => void }) => {
               <path d="M7 6L12 11L17 6" strokeLinecap="round" strokeLinejoin="round" opacity="0.4" />
             </svg>
           </motion.div>
-        </motion.div>
+        </motion.button>
 
         {/* Sound toggle icon */}
         <MusicButton />

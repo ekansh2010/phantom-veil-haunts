@@ -15,7 +15,7 @@ import { browseHrefForRow, type Category } from "@/lib/movies";
 // Inner Spotlight Billboard component
 const FeaturedSpotlight = ({ movie }: { movie: Movie }) => {
   const [inWatchlist, setInWatchlist] = useState(false);
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
 
   useEffect(() => {
@@ -39,7 +39,7 @@ const FeaturedSpotlight = ({ movie }: { movie: Movie }) => {
   }, [user, movie]);
 
   const toggleWatchlist = async () => {
-    if (!movie) return;
+    if (!movie || authLoading) return; // session check still running; the button is disabled meanwhile
     if (!user) {
       toast({ title: "Login required", description: "Sign in to add movies to your list.", variant: "destructive" });
       return;
@@ -118,7 +118,9 @@ const FeaturedSpotlight = ({ movie }: { movie: Movie }) => {
           </Link>
           <button
             onClick={toggleWatchlist}
-            className="px-6 py-3 rounded-lg border border-red-950/40 bg-red-950/10 hover:bg-red-950/20 text-foreground flex items-center gap-2 transition-colors text-sm font-medium tracking-wide"
+            disabled={authLoading}
+            aria-busy={authLoading}
+            className="px-6 py-3 rounded-lg border border-red-950/40 bg-red-950/10 hover:bg-red-950/20 text-foreground flex items-center gap-2 transition-colors text-sm font-medium tracking-wide disabled:opacity-60 disabled:cursor-wait"
           >
             {inWatchlist ? <Check size={16} className="text-primary" /> : <Plus size={16} />}
             {inWatchlist ? "In My List" : "My List"}
@@ -194,7 +196,7 @@ const Index = () => {
             <p className="text-muted-foreground mt-4 font-horror text-sm tracking-widest animate-pulse">Summoning categories...</p>
           </div>
         ) : (
-          <div id="movies-catalog" className="relative z-10 -mt-20 bg-gradient-to-b from-transparent via-deep-black/60 to-black/95 py-10 px-4 md:px-8 border-t border-red-950/20">
+          <div id="movies-catalog" className="relative z-10 overflow-x-clip -mt-20 bg-gradient-to-b from-transparent via-deep-black/60 to-black/95 py-10 px-4 md:px-8 border-t border-red-950/20">
             {/* Ambient blood red glow in the background of the catalog */}
             <div className="absolute top-10 left-1/4 w-96 h-96 bg-red-950/15 rounded-full filter blur-[100px] pointer-events-none" />
             <div className="absolute bottom-10 right-1/4 w-96 h-96 bg-red-950/10 rounded-full filter blur-[100px] pointer-events-none" />

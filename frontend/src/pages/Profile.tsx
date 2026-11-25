@@ -137,7 +137,7 @@ const Profile = () => {
               <button onClick={handleSave} disabled={saving} className="btn-horror px-6 py-2 rounded-lg text-primary-foreground text-sm">
                 {saving ? "Saving..." : "Save Profile"}
               </button>
-              <button onClick={() => { signOut(); navigate("/"); }} className="px-6 py-2 rounded-lg border border-border text-foreground text-sm hover:bg-muted transition-colors">
+              <button onClick={async () => { await signOut(); navigate("/"); }} className="px-6 py-2 rounded-lg border border-border text-foreground text-sm hover:bg-muted transition-colors">
                 Logout
               </button>
             </div>

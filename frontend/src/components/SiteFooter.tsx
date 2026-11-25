@@ -1,5 +1,14 @@
+import { FormEvent } from "react";
 import { Link } from "react-router-dom";
 import TmdbLogo from "@/components/TmdbLogo";
+import { toast } from "@/hooks/use-toast";
+
+// There is no newsletter backend yet: say so instead of silently swallowing the address.
+const onSubscribe = (e: FormEvent<HTMLFormElement>) => {
+  e.preventDefault();
+  toast({ title: "Newsletter coming soon", description: "Sign-ups aren't open yet. Nothing was sent or stored." });
+  e.currentTarget.reset();
+};
 
 /** Site-wide footer, including the TMDB attribution required by its API terms. */
 const SiteFooter = () => (
@@ -38,9 +47,11 @@ const SiteFooter = () => (
         <p className="text-xs text-muted-foreground">
           Subscribe to get whispers of new releases and classic nightmares direct to your inbox.
         </p>
-        <form onSubmit={e => e.preventDefault()} className="flex gap-2">
+        <form onSubmit={onSubscribe} className="flex gap-2">
           <input
             type="email"
+            required
+            aria-label="Email for newsletter"
             placeholder="Your mortal email..."
             className="px-3 py-2 text-xs bg-muted/30 border border-red-950/40 rounded focus:border-primary focus:outline-none text-foreground w-full placeholder:text-muted-foreground/50 transition-colors"
           />

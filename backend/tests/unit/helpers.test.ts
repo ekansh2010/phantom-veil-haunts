@@ -39,9 +39,9 @@ describe("helpers", () => {
   });
 
   it("backupTrailerFor picks a clip by genre", () => {
-    expect(backupTrailerFor("Zombie Apocalypse")).toMatch(/painted-face/);
-    expect(backupTrailerFor("Haunted House")).toMatch(/cabin/);
-    expect(backupTrailerFor()).toMatch(/lightnings/);
+    expect(backupTrailerFor("Zombie Apocalypse")).toMatch(/41622/);
+    expect(backupTrailerFor("Haunted House")).toMatch(/41620/);
+    expect(backupTrailerFor()).toMatch(/41621/);
   });
 });
 

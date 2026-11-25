@@ -1,4 +1,5 @@
 import type { IMovie, IUser } from "../models/index.js";
+import { normalizeTrailerUrl } from "../data/catalog.js";
 
 export interface PublicUser {
   id: string;
@@ -87,7 +88,7 @@ export const toPublicMovie = (m: IMovie, options: { detail?: boolean } = {}): Pu
     description: m.description,
     genre: m.genre,
     cast: m.cast ?? [],
-    ...(m.trailer ? { trailer: m.trailer } : {}),
+    ...(m.trailer ? { trailer: normalizeTrailerUrl(m.trailer) } : {}),
     ...(m.imdbId ? { imdbId: m.imdbId } : {}),
     mediaType: m.mediaType,
   };

@@ -26,7 +26,7 @@ const SEED_IDS = new Set(["1", "2", "3", "4", "5", "6", "7", "8"]);
 
 const MovieDetail = () => {
   const { id } = useParams();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const [movie, setMovie] = useState<Movie | null>(null);
   const [similarMovies, setSimilarMovies] = useState<Movie[]>([]);
@@ -84,6 +84,7 @@ const MovieDetail = () => {
   }, [user, id]);
 
   const toggleWatchlist = async () => {
+    if (authLoading) return; // session check still running; the button is disabled meanwhile
     if (!user) {
       toast({ title: "Login required", description: "Sign in to add movies to your list.", variant: "destructive" });
       return;
@@ -223,7 +224,9 @@ const MovieDetail = () => {
               )}
               <button
                 onClick={toggleWatchlist}
-                className="px-6 py-3 rounded-lg border border-border bg-muted/50 hover:bg-muted text-foreground flex items-center gap-2 transition-colors"
+                disabled={authLoading}
+                aria-busy={authLoading}
+                className="px-6 py-3 rounded-lg border border-border bg-muted/50 hover:bg-muted text-foreground flex items-center gap-2 transition-colors disabled:opacity-60 disabled:cursor-wait"
               >
                 {inWatchlist ? <Check size={18} /> : <Plus size={18} />}
                 {inWatchlist ? "In My List" : "My List"}
